@@ -14,8 +14,24 @@ A Simple JavaScript utility to stabilize viewport height units (svh, lvh) on iOS
 
 ## Usage
 
+### JS Usage
 ```js
 import stableScroll from 'stable-scroll-vh-ios';
 
 // Initialize the module (uses lvh by default)
 stableScroll.init();
+```
+
+### CSS Usage
+
+```css
+.fullscreen {
+  /* Fallback order:
+     1. Latest browsers: var(--lvh)
+     2. If var() not supported: 1lvh
+     3. Old browsers: 100vh
+  */
+  height: 100vh; /* fallback for very old browsers */
+  height: calc(100 * var(--lvh, 1lvh));
+}
+```
