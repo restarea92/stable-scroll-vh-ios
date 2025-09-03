@@ -22,16 +22,9 @@ const stableScroll = {
      */
     refreshDimensions(force = false) {
         clearTimeout(this.resizeTimeout);
-        
-        if (force) {
-            // Immediate update for critical cases like orientation change
+        this.resizeTimeout = setTimeout(() => {
             this.updateViewportHeight(force);
-        } else {
-            // Debounced update for resize events
-            this.resizeTimeout = setTimeout(() => {
-                this.updateViewportHeight(force);
-            }, 50); // Reduced from 100ms to 50ms for faster response
-        }
+        }, 100);
     },
 
     /**
@@ -41,40 +34,29 @@ const stableScroll = {
     updateViewportHeight(force = false) {
         const newLvh = this.toPx('1lvh');
         const newSvh = this.toPx('1svh');
-        
         if (force) {
             document.documentElement.style.setProperty(this.lvhPropertyName, `${newLvh}px`);
             document.documentElement.style.setProperty(this.svhPropertyName, `${newSvh}px`);
             this.lvh = newLvh;
             this.svh = newSvh;
-            return;
         }
 
         if (this.isScrolling || this.isTouchScrolling) {
-            // lvh - only increase during scroll to prevent jumping
-            if (newLvh > this.lvh) {
+            // lvh
+            if (this.lvh < newLvh) {
                 document.documentElement.style.setProperty(this.lvhPropertyName, `${newLvh}px`);
                 this.lvh = newLvh;
             }
-            // svh - only decrease during scroll to prevent jumping
-            if (this.svh === 0 || newSvh < this.svh) {
+            // svh
+            if (this.svh === 0 || this.svh > newSvh) {
                 document.documentElement.style.setProperty(this.svhPropertyName, `${newSvh}px`);
                 this.svh = newSvh;
             }
         } else {
-            // Smooth transition when not scrolling
-            const lvhDiff = Math.abs(newLvh - this.lvh);
-            const svhDiff = Math.abs(newSvh - this.svh);
-            
-            // Only update if difference is significant to avoid micro-adjustments
-            if (lvhDiff > 1) {
-                document.documentElement.style.setProperty(this.lvhPropertyName, `${newLvh}px`);
-                this.lvh = newLvh;
-            }
-            if (svhDiff > 1) {
-                document.documentElement.style.setProperty(this.svhPropertyName, `${newSvh}px`);
-                this.svh = newSvh;
-            }
+            document.documentElement.style.setProperty(this.lvhPropertyName, `${newLvh}px`);
+            document.documentElement.style.setProperty(this.svhPropertyName, `${newSvh}px`);
+            this.lvh = newLvh;
+            this.svh = newSvh;
         }
     },
 
@@ -131,35 +113,33 @@ const stableScroll = {
             } else {
                 touchScrollTimeout = setTimeout(() => {
                     this.isTouchScrolling = false;
-                }, 150); // Reduced timeout for faster response
+                }, 200);
             }
 
             scrollTimeout = setTimeout(() => {
                 this.isScrolling = false;
-                this.updateViewportHeight(); // Update after scroll ends
-            }, 150); // Reduced timeout for faster response
-        }, { passive: true });
+            }, 200);
+        });
 
         window.addEventListener('touchstart', () => {
             clearTimeout(touchScrollTimeout);
             this.isTouching = true;
-        }, { passive: true });
+        });
 
         window.addEventListener('touchend', () => {
             clearTimeout(touchScrollTimeout);
             this.isTouching = false;
             touchScrollTimeout = setTimeout(() => {
                 this.isTouchScrolling = false;
-                this.updateViewportHeight(); // Update after touch ends
-            }, 150); // Reduced timeout for faster response
-        }, { passive: true });
+            }, 200);
+        });
 
         window.addEventListener('resize', () => {
             this.refreshDimensions();
         });
 
         window.addEventListener('orientationchange', () => {
-            this.refreshDimensions(true); // Force refresh on orientation change
+            this.refreshDimensions(true);
         });
     },
 
@@ -177,10 +157,10 @@ const stableScroll = {
         if (!allowedProperty.includes(property))
             return;
 
-        if (!name.startsWith('-')) { 
-            name = `--${name}`;
-        } else {
-            if (name.split('--').length !== 2) {
+        if (!name.startsWith('-')) { // -으로 시작하지 않는 경우
+            name = `--${name}`; // 1개도 없으므로 -- 붙이기
+        } else { // 아닌경우 1개 이상일때, 
+            if (name.split('--').length !== 2) { // 정확히 2개가 아닌경우 에러던짐
                 throw new Error(`Invalid custom property name: ${name}`);
             }
         }
@@ -204,6 +184,29 @@ const stableScroll = {
         this.refreshDimensions(true);
         this.initEventListener();
     },
+
+    debug(elements, printElement) {
+        if (!elements || !printElement) return;
+
+        const resizeObserver = new ResizeObserver(entries => {
+            for (let entry of entries) {
+                const element = entry.target;
+                const elementId = element.id;
+                const { width, height } = entry.contentRect;
+
+                const printElementItem = document.querySelector(`#debug-${element.dataset.name}`);
+                printElementItem.innerText = `Element Height: ${height}px`;
+            }
+        });
+
+        elements.forEach(element => {
+            const temp = document.createElement('div');
+            temp.id = `debug-${element.dataset.name}`;
+            printElement.appendChild(temp);
+            elements.forEach(element => resizeObserver.observe(element));
+        });
+
+    }
 };
 
 export default stableScroll;
