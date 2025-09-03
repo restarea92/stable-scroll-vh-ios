@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <script>
+    /**
+ * @module stableScroll
+ * @description
+ * A lightweight JavaScript utility to stabilize viewport height units (svh, lvh) on iOS and prevent scroll jitter. 
+ * Some iOS in-app browsers or non-Safari browsers may incorrectly interpret svh and lvh similar to dvh, causing layout issues. 
+ * This module ensures consistent viewport sizing for mobile web apps affected by these quirks.
+ */
+const stableScroll = {
+    lvh: 0,
+    svh: 0,
+    lvhPropertyName: '--lvh',
+    svhPropertyName: '--svh',
+    resizeTimeout: null,
+    isScrolling: false,
+    isTouching: false,
+    isTouchScrolling: false,
+    virtualElement: null,
+
+    /**
+     * @function refreshDimensions
+     * @description Refresh viewport height CSS variable after a resize event.
+     */
+    refreshDimensions() {
+        clearTimeout(this.resizeTimeout);
+        this.resizeTimeout = setTimeout(() => {
+            this.updateViewportHeight();
+        }, 100);
+    },
+
+    /**
+     * @function updateViewportHeight
+     * @description Update CSS variable `--lvh` with the latest calculated value.
+     */
+    updateViewportHeight() {
+        const newLvh = this.toPx('1lvh');
+        const newSvh = this.toPx('1svh');
+
+        if (this.isScrolling || this.isTouchScrolling) {
+            // lvh
+            if (this.lvh < newLvh) {
+                document.documentElement.style.setProperty(this.lvhPropertyName, `${newLvh}px`);
+                this.lvh = newLvh;
+            }
+            // svh
+            if (this.svh === 0 || this.svh > newSvh) {
+                document.documentElement.style.setProperty(this.svhPropertyName, `${newSvh}px`);
+                this.svh = newSvh;
+            }
+        } else {
+            document.documentElement.style.setProperty(this.lvhPropertyName, `${newLvh}px`);
+            document.documentElement.style.setProperty(this.svhPropertyName, `${newSvh}px`);
+            this.lvh = newLvh;
+            this.svh = newSvh;
+        }
+    },
+
+    createVirtualElement() {
+        let virtualElement = document.querySelector('#stable-scroll-virtual-element');
+        if (!virtualElement) {
+            virtualElement = document.createElement('div');
+            virtualElement.style.position = 'absolute';
+            virtualElement.style.top = '0';
+            virtualElement.style.left = '0';
+            virtualElement.style.width = '0';
+            virtualElement.style.height = '0';
+            virtualElement.style.pointerEvents = 'none';
+            virtualElement.id = 'stable-scroll-virtual-element';
+            document.body.appendChild(virtualElement);
+            this.virtualElement = virtualElement;
+        }
+    },
+
+    /**
+     * @function toPx
+     * @description Convert a CSS unit (like 1lvh) into pixels.
+     * @param {string} cssValue - CSS unit string.
+     * @returns {number} - Calculated pixel value.
+     */
+    toPx(cssValue) {
+        if (!document.body) return 0;
+
+        if (!this.virtualElement) {
+            this.createVirtualElement();
+        }
+        const virtualElement = this.virtualElement;
+        virtualElement.style.height = cssValue;
+
+        const pixels = parseFloat(getComputedStyle(virtualElement).height);
+        return pixels;
+    },
+
+    /**
+     * @function initEventListener
+     * @description Initialize scroll, touch, and resize event listeners
+     * to keep viewport height stable.
+     */
+    initEventListener() {
+        let scrollTimeout, touchScrollTimeout;
+
+        window.addEventListener('scroll', () => {
+            clearTimeout(scrollTimeout);
+            clearTimeout(touchScrollTimeout);
+            this.isScrolling = true;
+
+            if (this.isTouching) {
+                this.isTouchScrolling = true;
+            } else {
+                touchScrollTimeout = setTimeout(() => {
+                    this.isTouchScrolling = false;
+                }, 200);
+            }
+
+            scrollTimeout = setTimeout(() => {
+                this.isScrolling = false;
+            }, 200);
+        });
+
+        window.addEventListener('touchstart', () => {
+            clearTimeout(touchScrollTimeout);
+            this.isTouching = true;
+        });
+
+        window.addEventListener('touchend', () => {
+            clearTimeout(touchScrollTimeout);
+            this.isTouching = false;
+            touchScrollTimeout = setTimeout(() => {
+                this.isTouchScrolling = false;
+            }, 200);
+        });
+
+        window.addEventListener('resize', () => {
+            this.refreshDimensions();
+        });
+    },
+
+
+    /**
+     * Set custom CSS property names for viewport height.
+     * @param {*} property - The property to set ('lvh' or 'svh').
+     * @param {*} name - The custom property name to use.
+     * @returns {void}
+     * default is --lvh and --svh
+     */
+    setCustomProperties(property, name) {
+        const allowedProperty = ['lvh', 'svh'];
+
+        if (!allowedProperty.includes(property))
+            return;
+
+        if (!name.startsWith('-')) { // -으로 시작하지 않는 경우
+            name = `--${name}`; // 1개도 없으므로 -- 붙이기
+        } else { // 아닌경우 1개 이상일때, 
+            if (name.split('--').length !== 2) { // 정확히 2개가 아닌경우 에러던짐
+                throw new Error(`Invalid custom property name: ${name}`);
+            }
+        }
+
+        if (property === 'lvh') {
+            this.lvhPropertyName = name;
+        } else if (property === 'svh') {
+            this.svhPropertyName = name;
+        }
+    },
+
+    /**
+     * @function init
+     * @description Initialize the module and set up event listeners.
+     * @param {object} options - Configuration options.
+     * @returns {void}
+     */
+    init(options = {}) {
+        this.setCustomProperties('lvh', options.lvhPropertyName || this.lvhPropertyName);
+        this.setCustomProperties('svh', options.svhPropertyName || this.svhPropertyName);
+        this.refreshDimensions();
+        this.initEventListener();
+    },
+
+    debug(elements, printElement) {
+        if (!elements || !printElement) return;
+
+        const resizeObserver = new ResizeObserver(entries => {
+            for (let entry of entries) {
+                const element = entry.target;
+                const elementId = element.id;
+                const { width, height } = entry.contentRect;
+
+                const printElementItem = document.querySelector(`#debug-${element.dataset.name}`);
+                printElementItem.innerText = `Element Height: ${height}px`;
+            }
+        });
+
+        elements.forEach(element => {
+            const temp = document.createElement('div');
+            temp.id = `debug-${element.dataset.name}`;
+            printElement.appendChild(temp);
+            elements.forEach(element => resizeObserver.observe(element));
+        });
+
+    }
+};
+
+// export default stableScroll;
+
+document.addEventListener('DOMContentLoaded', () => {
+    const printElement = document.querySelector('.print-element');
+    const elements = document.querySelectorAll('.debug-element');
+    stableScroll.init();
+    stableScroll.debug(elements, printElement);
+});
+
+</script>
+</head>
+<body>
+    <style>
+        .print-element {
+            position: fixed;
+            top: 0;
+            left: 0;
+            color: white;
+            padding: 10px;
+            font-size: 12px;
+            z-index: 9999;
+            background-color: red;
+            color: white;
+            font-size: 1.5rem;
+            font-weight: bold;
+            display: flex;
+            width: fit-content;
+            flex-direction: column;
+            > div {
+                display: flex;
+                width: fit-content;
+                height: 2rem;
+            }
+        }
+
+        .debug-element {
+            width: 20%;
+            border: 2px solid black;
+        }
+
+        .debug-element.svh {
+            height: calc(100 * var(--svh, 1vh));
+        }
+
+        .debug-element.lvh {
+            height: calc(100 * var(--lvh, 1vh));
+        }
+    </style>
+    <div style="display: flex; gap:1rem">
+        <div class="debug-element svh" data-name="svh"></div>
+        <div class="debug-element lvh" data-name="lvh"></div>
+    </div>
+    <div class="print-element"></div>
+</body>
+</html>
