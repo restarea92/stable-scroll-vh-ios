@@ -27,10 +27,10 @@ const stableScroll = {
      * @function refreshDimensions
      * @description Refresh viewport height CSS variable after a resize event.
      */
-    refreshDimensions() {
+    refreshDimensions(force = false) {
         clearTimeout(this.resizeTimeout);
         this.resizeTimeout = setTimeout(() => {
-            this.updateViewportHeight();
+            this.updateViewportHeight(force);
         }, 100);
     },
 
@@ -38,9 +38,15 @@ const stableScroll = {
      * @function updateViewportHeight
      * @description Update CSS variable `--lvh` with the latest calculated value.
      */
-    updateViewportHeight() {
+    updateViewportHeight(force = false) {
         const newLvh = this.toPx('1lvh');
         const newSvh = this.toPx('1svh');
+        if (force) {
+            document.documentElement.style.setProperty(this.lvhPropertyName, `${newLvh}px`);
+            document.documentElement.style.setProperty(this.svhPropertyName, `${newSvh}px`);
+            this.lvh = newLvh;
+            this.svh = newSvh;
+        }
 
         if (this.isScrolling || this.isTouchScrolling) {
             // lvh
@@ -138,6 +144,10 @@ const stableScroll = {
         window.addEventListener('resize', () => {
             this.refreshDimensions();
         });
+
+        window.addEventListener('orientationchange', () => {
+            this.refreshDimensions(true);
+        });
     },
 
 
@@ -178,7 +188,7 @@ const stableScroll = {
     init(options = {}) {
         this.setCustomProperties('lvh', options.lvhPropertyName || this.lvhPropertyName);
         this.setCustomProperties('svh', options.svhPropertyName || this.svhPropertyName);
-        this.refreshDimensions();
+        this.refreshDimensions(true);
         this.initEventListener();
     },
 
@@ -220,7 +230,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <body>
     <style>
         body {
-            min-height: calc( 200 * var(--lvh, 1vh));
+            min-height: calc( 200 * var(--lvh) );
         }
         .print-element {
             position: fixed;
