@@ -203,7 +203,7 @@ const stableScroll = {
             const temp = document.createElement('div');
             temp.id = `debug-${element.dataset.name}`;
             printElement.appendChild(temp);
-            elements.forEach(element => resizeObserver.observe(element));
+            resizeObserver.observe(element);
         });
 
     }
